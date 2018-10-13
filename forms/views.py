@@ -8,7 +8,7 @@ from django.template.loader import render_to_string
 from .tokens import account_activation_token
 from django.http import HttpResponse
 from dateutil import parser
-from random import randint
+
 def form_view(request):
 	return render(request,'room/book_a_room.html')
 
@@ -19,8 +19,8 @@ def form_submit(request):
 	street=request.POST["street"]
 	city=request.POST["city"]
 	pincode=request.POST["post-code"]
-	arrive=request.POST["arrive"]
-	depart=request.POST["depart"]
+	arrive=parser.parse(request.POST["arrive"]).date()
+	depart = parser.parse(request.POST["depart"]).date()
 	room_type = request.POST["room_type"]
 	reference_name=request.POST["reference_name"]
 	reference_email=request.POST["reference_email"]
@@ -34,12 +34,12 @@ def form_submit(request):
 		f = 1
 		rID = r.roomID
 		for b in Booking.objects.raw('SELECT * FROM forms_booking WHERE roomID = %s', [rID]):
-			if(b.arrive > parser.parse(depart).date() or b.depart.date() < parser.parse(arrive).date()):
+			if(b.arrive > depart or b.depart < arrive):
 				pass
 			else:
 				f=0
 		if f == 1:
-			booking = Booking(bookingID = formsubmit.id, roomID = rID, name = name, arrive = arrive, depart = depart)
+			booking = Booking(bookingID = formsubmit.id, roomID = rID, arrive = arrive, depart = depart)
 			booking.save()
 			found = 1
 			break
@@ -47,12 +47,12 @@ def form_submit(request):
 			break
 	if found == 0:
 		#room not available
-		pass
+		messages.info(request, 'Your password has been changed successfully!')
+		return HttpResponseRedirect('/profiles/'+in_username)
+	
 
-	user = User.objects.create_user(username=name+str(randint(0, 999)),email=reference_email,password='arpitarpit',first_name=name)
+	user = User.objects.create_user(username=name,email=reference_email,password='arpitarpit')
 	user.is_active = False
-	user.userprofile.reference_verified= False
-	user.userprofile.director_verified= False
 	mail_subject = 'IIITM guest house'
 	user.save()
 	message=render_to_string('referencemail.html',{'user': user,
@@ -80,9 +80,6 @@ def activate(request, uidb64, token):
 	except(TypeError, ValueError, OverflowError, User.DoesNotExist):
 		user = None
 	if user is not None and account_activation_token.check_token(user, token):
-		profile = user.userprofile
-		profile.reference_verified = True
-		profile.save()
 		user.save()
 		return HttpResponse('Thank you for your confirmation')
 	else:
@@ -94,9 +91,6 @@ def director_activate(request, uidb64,token):
 	except(TypeError, ValueError, OverflowError, User.DoesNotExist):
 		user = None
 	if user is not None :
-		profile = user.userprofile
-		profile.director_verified = True
-		profile.save()
 		user.is_active = True
 		user.save()
 		return HttpResponse('Thank you for your confirmation')
